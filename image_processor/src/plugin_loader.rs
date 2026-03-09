@@ -46,7 +46,12 @@ impl Plugin {
 }
 
 fn validate_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<(), AppError> {
-    if rgba.len() != (width as usize * height as usize * 4) {
+    let expected_len = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or(AppError::InvalidImageBuffer)?;
+
+    if rgba.len() != expected_len {
         return Err(AppError::InvalidImageBuffer);
     }
     Ok(())
@@ -67,6 +72,13 @@ mod tests {
     fn validate_rgba_rejects_wrong_buffer_size() {
         let rgba = vec![0_u8; 2 * 3 * 4 - 1];
         let result = validate_rgba(2, 3, &rgba);
+        assert!(matches!(result, Err(AppError::InvalidImageBuffer)));
+    }
+
+    #[test]
+    fn validate_rgba_rejects_overflow_dimensions() {
+        let rgba = vec![0_u8; 4];
+        let result = validate_rgba(u32::MAX, u32::MAX, &rgba);
         assert!(matches!(result, Err(AppError::InvalidImageBuffer)));
     }
 }
