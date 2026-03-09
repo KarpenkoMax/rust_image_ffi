@@ -51,3 +51,22 @@ fn validate_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<(), AppError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::validate_rgba;
+    use crate::error::AppError;
+
+    #[test]
+    fn validate_rgba_accepts_exact_buffer_size() {
+        let rgba = vec![0_u8; 2 * 3 * 4];
+        assert!(validate_rgba(2, 3, &rgba).is_ok());
+    }
+
+    #[test]
+    fn validate_rgba_rejects_wrong_buffer_size() {
+        let rgba = vec![0_u8; 2 * 3 * 4 - 1];
+        let result = validate_rgba(2, 3, &rgba);
+        assert!(matches!(result, Err(AppError::InvalidImageBuffer)));
+    }
+}
