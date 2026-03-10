@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-///  Ошибки обработчика изображений
+///  Image processor errors
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("invalid plugin path")]
