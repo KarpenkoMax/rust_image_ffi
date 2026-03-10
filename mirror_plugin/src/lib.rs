@@ -14,6 +14,15 @@
 #![warn(missing_docs)]
 
 use std::ffi::CStr;
+use std::sync::Once;
+
+static INIT_LOGGER: Once = Once::new();
+
+fn init_logger() {
+    INIT_LOGGER.call_once(|| {
+        let _ = env_logger::try_init();
+    });
+}
 
 #[derive(serde::Deserialize)]
 struct MirrorParams {
@@ -35,53 +44,56 @@ struct MirrorParams {
 /// The function validates pointers/params and returns early on errors, logging
 /// details to stderr. On success, it mutates `rgba_data` in-place.
 ///
-/// # Safety contract (caller side)
-/// - `rgba_data` must be non-null and valid for writes for the full buffer size.
-/// - `params` must be non-null and point to a valid NUL-terminated C string.
-/// - The memory behind pointers must stay valid for the duration of the call.
+/// # Safety
+/// Caller must guarantee:
+/// - `rgba_data` is non-null and valid for writes for the full buffer size.
+/// - `params` is non-null and points to a valid NUL-terminated C string.
+/// - The memory behind pointers stays valid for the duration of the call.
 #[unsafe(no_mangle)]
-pub extern "C" fn process_image(
+pub unsafe extern "C" fn process_image(
     width: u32,
     height: u32,
     rgba_data: *mut u8,
     params: *const std::os::raw::c_char,
 ) {
+    init_logger();
+
     if rgba_data.is_null() {
-        eprintln!("[mirror_plugin] rgba_data is null");
+        log::error!("[mirror_plugin] rgba_data is null");
         return;
     }
     if params.is_null() {
-        eprintln!("[mirror_plugin] params is null");
+        log::error!("[mirror_plugin] params is null");
         return;
     }
     // SAFETY:
     // `params` is checked for null above and is expected to point to a valid
     // NUL-terminated C string according to the FFI contract.
     let Ok(params_str) = (unsafe { CStr::from_ptr(params) }).to_str() else {
-        eprintln!("[mirror_plugin] params is not valid UTF-8");
+        log::error!("[mirror_plugin] params is not valid UTF-8");
         return;
     };
 
     let cfg: MirrorParams = match serde_json::from_str(params_str) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("[mirror_plugin] invalid JSON params: {e}");
+            log::error!("[mirror_plugin] invalid JSON params: {e}");
             return;
         }
     };
 
     let Some(pixel_count) = (width as usize).checked_mul(height as usize) else {
-        eprintln!("[mirror_plugin] overflow while computing pixel count");
+        log::error!("[mirror_plugin] overflow while computing pixel count");
         return;
     };
 
     let Some(len) = pixel_count.checked_mul(4) else {
-        eprintln!("[mirror_plugin] overflow while computing RGBA buffer length");
+        log::error!("[mirror_plugin] overflow while computing RGBA buffer length");
         return;
     };
 
     if len == 0 {
-        eprintln!("[mirror_plugin] empty image buffer (width={width}, height={height})");
+        log::error!("[mirror_plugin] empty image buffer (width={width}, height={height})");
         return;
     }
 

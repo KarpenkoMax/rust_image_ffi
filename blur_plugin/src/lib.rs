@@ -14,6 +14,15 @@
 #![warn(missing_docs)]
 
 use std::ffi::CStr;
+use std::sync::Once;
+
+static INIT_LOGGER: Once = Once::new();
+
+fn init_logger() {
+    INIT_LOGGER.call_once(|| {
+        let _ = env_logger::try_init();
+    });
+}
 
 #[derive(Debug, serde::Deserialize)]
 struct BlurParams {
@@ -35,23 +44,26 @@ struct BlurParams {
 /// The function validates pointers/params and returns early on errors, logging
 /// details to stderr. On success, it mutates `rgba_data` in-place.
 ///
-/// # Safety contract (caller side)
-/// - `rgba_data` must be non-null and valid for writes for the full buffer size.
-/// - `params` must be non-null and point to a valid NUL-terminated C string.
-/// - The memory behind pointers must stay valid for the duration of the call.
+/// # Safety
+/// Caller must guarantee:
+/// - `rgba_data` is non-null and valid for writes for the full buffer size.
+/// - `params` is non-null and points to a valid NUL-terminated C string.
+/// - The memory behind pointers stays valid for the duration of the call.
 #[unsafe(no_mangle)]
-pub extern "C" fn process_image(
+pub unsafe extern "C" fn process_image(
     width: u32,
     height: u32,
     rgba_data: *mut u8,
     params: *const std::os::raw::c_char,
 ) {
+    init_logger();
+
     if rgba_data.is_null() {
-        eprintln!("[blur_plugin] rgba_data is null");
+        log::error!("[blur_plugin] rgba_data is null");
         return;
     }
     if params.is_null() {
-        eprintln!("[blur_plugin] params is null");
+        log::error!("[blur_plugin] params is null");
         return;
     }
 
@@ -59,34 +71,34 @@ pub extern "C" fn process_image(
     // `params` is checked for null above and must be a valid NUL-terminated
     // C string according to the FFI contract.
     let Ok(params_str) = (unsafe { CStr::from_ptr(params) }).to_str() else {
-        eprintln!("[blur_plugin] params is not valid UTF-8");
+        log::error!("[blur_plugin] params is not valid UTF-8");
         return;
     };
 
     let cfg: BlurParams = match serde_json::from_str(params_str) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("[blur_plugin] invalid JSON params: {e}");
+            log::error!("[blur_plugin] invalid JSON params: {e}");
             return;
         }
     };
 
     if cfg.iterations == 0 {
-        eprintln!("[blur_plugin] iterations must be >= 1");
+        log::error!("[blur_plugin] iterations must be >= 1");
         return;
     }
 
     let Some(pixel_count) = (width as usize).checked_mul(height as usize) else {
-        eprintln!("[blur_plugin] overflow while computing pixel count");
+        log::error!("[blur_plugin] overflow while computing pixel count");
         return;
     };
     let Some(len) = pixel_count.checked_mul(4) else {
-        eprintln!("[blur_plugin] overflow while computing RGBA buffer length");
+        log::error!("[blur_plugin] overflow while computing RGBA buffer length");
         return;
     };
 
     if len == 0 {
-        eprintln!("[blur_plugin] empty image buffer (width={width}, height={height})");
+        log::error!("[blur_plugin] empty image buffer (width={width}, height={height})");
         return;
     }
 

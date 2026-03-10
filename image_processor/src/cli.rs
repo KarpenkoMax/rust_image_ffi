@@ -50,12 +50,13 @@ impl Args {
         }
 
         if let Some(parent) = self.output.parent()
-            && !parent.exists() {
-                return Err(AppError::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("output directory not found: {}", parent.display()),
-                )));
-            }
+            && !parent.exists()
+        {
+            return Err(AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("output directory not found: {}", parent.display()),
+            )));
+        }
 
         self.output_is_png()?;
         Ok(())
